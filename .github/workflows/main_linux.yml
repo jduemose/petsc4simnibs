@@ -1,0 +1,186 @@
+name: Linux - Build, Test, and Upload
+
+on:
+  push:
+    branches: [ main ]
+    tags:
+      - v*
+  pull_request:
+    branches: [ main ]
+
+env:
+  VERSION_MPICH: 4.2.1
+  VERSION_OPENBLAS: 0.3.27
+  VERSION_PETSC: 3.21.2
+
+  TAR_MPICH: mpich-4.2.1.tar.gz
+  TAR_OPENBLAS: OpenBLAS-0.3.27.tar.gz
+  TAR_PETSC: petsc-3.21.2.tar.gz
+
+  URL_MPICH: https://www.mpich.org/static/downloads/4.2.1/mpich-4.2.1.tar.gz
+  URL_OPENBLAS: https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.27/OpenBLAS-0.3.27.tar.gz
+  URL_PETSC: https://web.cels.anl.gov/projects/petsc/download/release-snapshots/petsc-3.21.2.tar.gz
+
+  LIB_DIR: /custom_libs # store libs in this dir
+
+  #MPICH_FLAGS: -fPIC -march=native
+  FLAGS_OPENBLAS: USE_THREAD=0 USE_OPENMP=0 # could consider USE_THREAD=1 ?
+  PETSC_FLAGS: -O2 -s -march=native # C/CXX/F flags
+
+  PETSC_ARCH: arch-linux-c-opt
+
+# defaults:
+#   run:
+#     shell: bash
+#     working-directory: ./scripts
+
+jobs:
+  build:
+    name: Build and Upload Artifact
+    runs-on: ubuntu-latest
+    container:
+      # https://github.com/pypa/manylinux
+      # toolchain GCC 10
+      image: quay.io/pypa/manylinux2014_x86_64
+
+    if: ${{ startsWith(github.ref, 'refs/tags') || !contains(github.event.head_commit.message, '[skip ci]') }}
+
+    steps:
+    - uses: actions/checkout@v4 # checkout repository
+
+    - name: Prepare
+      run: |
+        echo "Creating ${LIB_DIR}"
+        mkdir $LIB_DIR
+
+        # ugly but for testing
+        echo "Setting python"
+        echo "python=/opt/python/cp311-cp311/bin/python" >> $GITHUB_ENV
+
+    - name: Build MPICH
+      run: |
+        START_DIR=$PWD
+
+        curl -O $URL_MPICH
+        tar -xzf $TAR_MPICH -C $LIB_DIR
+        cd $LIB_DIR/mpich-$VERSION_MPICH
+
+        MPICH_BUILD_DIR=$(realpath build)
+        MPICH_INSTALL_DIR=$(realpath installation)
+
+        mkdir $MPICH_BUILD_DIR
+        mkdir $MPICH_INSTALL_DIR
+
+        cd $MPICH_BUILD_DIR
+
+        # enable-fast=all/yes sets O2,ndebug,alwaysinline
+        ../configure \
+            --prefix=$MPICH_INSTALL_DIR \
+            --enable-fast=all \
+            --with-device=ch3:nemesis \
+            --with-pm=hydra \
+            --with-hwloc=embedded \
+            --disable-maintainer-mode \
+            --disable-dependency-tracking
+
+        make
+        make install
+        cd $START_DIR
+
+        # expose variable
+        echo "MPICH_INSTALL_DIR=${MPICH_INSTALL_DIR}" >> $GITHUB_ENV
+        echo "PKG_PATH_MPICH=${MPICH_INSTALL_DIR}/lib/pkgconfig" >> $GITHUB_ENV
+
+    - name: Build OpenBLAS
+      run: |
+        START_DIR=$PWD
+
+        curl -O -L ${URL_OPENBLAS}
+        tar -xzf ${TAR_OPENBLAS} -C $LIB_DIR
+        cd $LIB_DIR/OpenBLAS-${VERSION_OPENBLAS}
+
+        OPENBLAS_INSTALL_DIR=$(realpath installation)
+        mkdir ${OPENBLAS_INSTALL_DIR}
+
+        FLAGS="PREFIX=${OPENBLAS_INSTALL_DIR} ${FLAGS_OPENBLAS}"
+
+        make $FLAGS
+        make $FLAGS install
+        cd $START_DIR
+
+        # expose variable
+        echo "OPENBLAS_INSTALL_DIR=${OPENBLAS_INSTALL_DIR}" >> $GITHUB_ENV
+        echo "PKG_PATH_OPENBLAS=${OPENBLAS_INSTALL_DIR}/lib/pkgconfig" >> $GITHUB_ENV
+
+    - name: Build PETSc
+      run: |
+        START_DIR=$PWD
+
+        curl -O $URL_PETSC
+        tar -xzf $TAR_PETSC -C $LIB_DIR
+        cd $LIB_DIR/petsc-$VERSION_PETSC
+        PETSC_DIR=$(realpath .)
+
+
+        $python configure \
+          --PETSC_ARCH=$PETSC_ARCH \
+          --COPTFLAGS=$PETSC_FLAGS \
+          --CXXOPTFLAGS=$PETSC_FLAGS \
+          --FOPTFLAGS=$PETSC_FLAGS \
+          --with-x=0 \
+          --with-debugging=0 \
+          --with-fortran-bindings=0 \
+          --with-mpi=1 \
+          --with-mpi-dir=$MPICH_INSTALL_DIR \
+          --with-hypre=1 \
+          --download-hypre \
+          --with-openblas=1 \
+          --with-openblas-dir=$OPENBLAS_INSTALL_DIR \
+          --with-shared-library=1
+        make all
+        make check
+
+        cd $START_DIR
+
+        echo "PKG_PATH_PETSC=$(realpath ${PETSC_DIR}/${PETSC_ARCH})/lib/pkgconfig" >> $GITHUB_ENV
+
+    - name: Build PETSc4SimNIBS
+      run: |
+
+        # enable meson to find the dependencies
+        # MPICH pkg is needed because of headers
+        export PKG_CONFIG_PATH=$PKG_PATH_MPICH:$PKG_PATH_PETSC
+
+        pip wheel --no-deps --w wheelhouse .
+        auditwheel repair --plat manylinux2014_x86_64 wheelhouse/petsc4simnibs*.whl
+
+    - name: Install PETSc4SimNIBS
+      run: $python -m pip install wheelhouse/petsc4simnibs*.whl
+
+  # test:
+  #   needs: build
+
+  #   steps:
+    - name: Test PETSc4SimNIBS
+      run: |
+        $python -m pip install pytest
+        $python -m pytest petsc4simnibs
+
+  # publish:
+  #   needs: build
+
+  #   steps:
+    - name: Upload artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: linux-wheels
+        path: wheelhouse/petsc4simnibs*.whl
+
+    # - name: Upload to PyPI
+    #   if: ${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags') }}
+    #   run: |
+    #     $PYTHON -m pip install twine
+    #     $PYTHON -m twine upload wheelhouse/*.whl -u __token__ -p "$PASSWORD"
+    #   env:
+    #     PASSWORD: ${{ secrets.PYPI_TOKEN }}
+    #     PYTHON: /opt/python/cp38-cp38/bin/python
