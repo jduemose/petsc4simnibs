@@ -2,6 +2,7 @@ petsc4simnibs_dir = 'petsc4simnibs'
 
 python_sources = [
     '__init__.py',
+    'logging.py',
 ]
 python.install_sources(python_sources, subdir: petsc4simnibs_dir)
 

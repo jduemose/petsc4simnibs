@@ -1,1 +1,1 @@
-from solver import PetscSolver
+from petsc4simnibs.solver import PetscSolver
