@@ -16,7 +16,7 @@ version = "0.1"
 requires-python = ">=3.11"
 
 dependencies =[
-    "numpy",
+    "numpy < 2",
 ]
 
 # [project.urls]  # Optional
@@ -25,7 +25,7 @@ dependencies =[
 # "Source" = "https://github.com/simnibs/simnibs/"
 
 [build-system]
-# requires = ['setuptools>=68', 'wheel', 'build', 'numpy', 'cython','setuptools-scm>=8']
+# requires = ['setuptools>=68', 'wheel', 'build', 'numpy', 'cython']
 build-backend = "mesonpy"
 requires = [
     "meson-python >= 0.16",
@@ -33,7 +33,7 @@ requires = [
     # `wheel` is needed for non-isolated builds, given that `meson-python`
     # doesn't list it as a runtime requirement (at least in 0.5.0)
     "wheel >= 0.41",
-    "numpy == 1.26",
+    "numpy < 1.26",
 ]
 
 

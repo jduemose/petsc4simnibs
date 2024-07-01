@@ -1,6 +1,6 @@
 project(
     'PETSc4SimNIBS',
-    'cpp', 'cython',
+    'c', 'cython',
     # Note that the git commit hash cannot be added dynamically here (it is added
     # in the dynamically generated and installed `scipy/version.py` though - see
     # tools/version_utils.py
@@ -25,7 +25,8 @@ assert(valid_host_os.contains(host_os), 'Unsupported OS')
 
 # ==== COMPILERS ====
 
-cpp = meson.get_compiler('cpp')
+cc = meson.get_compiler('c')
+# cpp = meson.get_compiler('cpp')
 cython = meson.get_compiler('cython')
 
 # ==== PROGRAMS ====
@@ -52,28 +53,27 @@ cython_prog = find_program(cython.cmd_array()[0])
 # When buildtype=debug, meson automatically sets things like -g and -Wall
 
 # NumPy and Boost cause various warnings. Suppress them
-cython_cpp_args = cpp.get_supported_arguments(
-    '-Wno-cpp',
-    '-Wno-nonnull',
-    '-Wno-sign-compare',
-    '-Wno-unused-value',
-)
-add_project_arguments(cython_cpp_args, language: 'cython')
+# cython_cpp_args = cpp.get_supported_arguments(
+#     '-Wno-cpp',
+#     '-Wno-nonnull',
+#     '-Wno-sign-compare',
+#     '-Wno-unused-value',
+# )
+# add_project_arguments(cython_cpp_args, language: 'cython')
 
 # ==== GENERATORS ====
 
 # meson ignores the flags in the .pyx files so specify here
-cython_cplus_args = [
+cython_cc_args = [
     '-3',
-    '--cplus',
     '--fast-fail',
     '--output-file', '@OUTPUT@',
     '@INPUT@',
 ]
-cython_gen_cpp = generator(
+cython_gen_cc = generator(
     cython_prog,
-    arguments: cython_cplus_args,
-    output: '@BASENAME@.cpp',
+    arguments: cython_cc_args,
+    output: '@BASENAME@.c',
 )
 
 

@@ -33,7 +33,7 @@ static PetscErrorCode _petsc_finalize(void){
  * stream: Where to redirect stderr and stdout
  * ksp: KSP object to be set-up
  * n_sims: number of simulations to run
- * rhs: right-hand-side vector 
+ * rhs: right-hand-side vector
  * solution: placeholder for the solution
 */
 static PetscErrorCode _petsc_prepare_ksp(int argc,char **args, PetscInt N,
@@ -85,7 +85,7 @@ static PetscErrorCode _print_ksp_info(KSP ksp, FILE *stream){
 
 /* Uses an already existing KSP object to solve
  * ksp: KSP object
- * rhs: right-hand-side vector 
+ * rhs: right-hand-side vector
  * stream: Where to redirect stderr and stdout
  * solution: placeholder for the solution
 */

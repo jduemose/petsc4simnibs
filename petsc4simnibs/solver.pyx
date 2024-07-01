@@ -5,7 +5,7 @@ import numpy as np
 cimport numpy as np
 import tempfile
 import os
-from petsc4simnibs.logging import logger
+from ..utils.simnibs_logger import logger
 
 cdef extern from "stdlib.h":
    void free(void* ptr)
@@ -43,7 +43,7 @@ cdef extern from "_solver.c" nogil:
 def petsc_initialize():
     err = _petsc_initialize()
     if err:
-        raise PetscSolverError(
+        raise PETScSolverError(
             'There was an error initializing PETSc.\n'
             'PETSc returned error code: {}'.format(err))
 
@@ -52,17 +52,17 @@ def petsc_initialize():
 def petsc_finalize():
     err = _petsc_finalize()
     if err:
-        raise PetscSolverError(
+        raise PETScSolverError(
             'There was an error finalizing PETSc.\n'
             'PETSc returned error code: {}'.format(err))
 
 
-class PetscSolverError(Exception):
+class PETScSolverError(Exception):
     pass
 
 
-cdef class PetscSolver:
-    ''' PetscSolver for FEM equations
+cdef class PETScSolver:
+    ''' PETScSolver for FEM equations
     Parameters
     --------------
     petsc_options: str
@@ -121,7 +121,7 @@ cdef class PetscSolver:
 
         if err:
             self.log_level = 50
-            raise PetscSolverError('There was an error setting up the solver.\n'
+            raise PETScSolverError('There was an error setting up the solver.\n'
                               'PETSc returned error code: {}'.format(err))
         else:
             self._log_record()
@@ -155,23 +155,23 @@ cdef class PetscSolver:
             # Print KSP info
             logger.log(self.log_level, 'Solving system {0} of {1}'.format(i+1, n_sims))
             err = _print_ksp_info(self.ksp, self._log_stream)
-            start = time.time()
             if err:
                 self.log_level = 50
-                raise PetscSolverError('There was an error during the solve.\n'
+                raise PETScSolverError('There was an error during the solve.\n'
                                   'PETSc returned error code: {}'.format(err))
             self._log_record()
             # Solve
+            start = time.time()
             with nogil:
                 err = _petsc_solve_with_ksp(
                     self.ksp, self._N, &rhs[self._N*i], self._log_stream, &solution[self._N*i])
+            end = time.time()
 
             if err:
                 self.log_level = 50
-                raise PetscSolverError('There was an error during the solve.\n'
+                raise PETScSolverError('There was an error during the solve.\n'
                                   'PETSc returned error code: {}'.format(err))
             self._log_record()
-            end = time.time()
             logger.log(self.log_level, 'Time to solve system: {0:.2f}s'.format(end-start))
 
         return solution.reshape(n_sims, -1).T
@@ -225,5 +225,5 @@ def petsc_solve(petsc_options, A, b):
     x: (N x n_sims) np.ndarray
         Solutions
     '''
-    solver = PetscSolver(petsc_options, A)
+    solver = PETScSolver(petsc_options, A)
     return solver.solve(b)
